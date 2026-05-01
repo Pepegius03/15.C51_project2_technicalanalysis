@@ -16,8 +16,6 @@ Scratch: 4 conv blocks [16→32→64→128] + BN + ReLU + MaxPool,
 
 import torch
 import torch.nn as nn
-from torchvision import models
-from torchvision.models import ResNet18_Weights
 
 N_CLASS = 2
 N_REG = 5
@@ -63,6 +61,8 @@ class ScratchCNN(nn.Module):
 class PretrainedResNet(nn.Module):
     def __init__(self, n_out: int):
         super().__init__()
+        from torchvision import models
+        from torchvision.models import ResNet18_Weights
         base = models.resnet18(weights=ResNet18_Weights.DEFAULT)
         in_features = base.fc.in_features
         base.fc = nn.Linear(in_features, n_out)
