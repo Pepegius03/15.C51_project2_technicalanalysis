@@ -25,6 +25,8 @@ def train_epoch(
         y = y.to(device) if task == "regression" else y.to(device, dtype=torch.long)
         optimizer.zero_grad()
         out = model(x)
+        if task == "regression":
+            out = out.squeeze(1)
         loss = loss_fn(out, y)
         loss.backward()
         optimizer.step()
@@ -46,6 +48,8 @@ def eval_epoch(
         x = x.to(device)
         y = y.to(device) if task == "regression" else y.to(device, dtype=torch.long)
         out = model(x)
+        if task == "regression":
+            out = out.squeeze(1)
         loss = loss_fn(out, y)
         total_loss += loss.item() * x.size(0)
     return total_loss / len(loader.dataset)
@@ -60,18 +64,16 @@ def train(
     task: str,
     device: torch.device,
     epochs: int = 30,
-    patience: int = 5,
+    patience: int = 10,
     checkpoint_path: Path | None = None,
 ) -> dict:
     """
-    Train with Adam + ReduceLROnPlateau + early stopping.
+    Train with Adam + CosineAnnealingLR + early stopping.
     Returns history dict with train_loss, val_loss lists and best_epoch.
     Saves best checkpoint if checkpoint_path provided.
     """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3
-    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     history = {"train_loss": [], "val_loss": [], "best_epoch": 0}
     best_val = float("inf")
@@ -81,7 +83,7 @@ def train(
         t0 = time.time()
         tr_loss = train_epoch(model, train_loader, optimizer, loss_fn, device, task)
         vl_loss = eval_epoch(model, val_loader, loss_fn, device, task)
-        scheduler.step(vl_loss)
+        scheduler.step()
 
         history["train_loss"].append(tr_loss)
         history["val_loss"].append(vl_loss)

@@ -67,7 +67,7 @@ def main():
             norm_stats = compute_dataset_stats(manifest, split="train")
 
         test_ds = DatasetCls(manifest, args.split, pretrained=pretrained, normalize_stats=norm_stats)
-        loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
+        loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
 
         model, _, _ = build_model(cfg_id)
         model.load_state_dict(torch.load(ckpt_path, map_location=device))

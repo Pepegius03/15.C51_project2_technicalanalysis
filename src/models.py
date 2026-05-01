@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 
 N_CLASS = 2
-N_REG = 5
+N_REG = 1
 
 
 # ── Scratch CNN ───────────────────────────────────────────────────────────────

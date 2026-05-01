@@ -55,7 +55,8 @@ def eval_regression(
     Returns dict with keys:
       directional_accuracy, mse, sharpe_ratio, n_samples.
 
-    Sharpe ratio: annualised on daily positions where position = sign(sum of predicted returns).
+    Target is the 5-day cumulative return (scalar per sample).
+    Sharpe: annualised, treating each sample as one holding period (~5 days).
     """
     model.eval()
     all_preds = []
@@ -63,24 +64,23 @@ def eval_regression(
 
     for x, y in loader:
         x = x.to(device)
-        preds = model(x).cpu().numpy()
+        preds = model(x).squeeze(1).cpu().numpy()   # (N,)
         all_preds.append(preds)
         all_targets.append(y.numpy())
 
-    preds = np.concatenate(all_preds)    # (N, 5)
-    targets = np.concatenate(all_targets)  # (N, 5)
+    preds   = np.concatenate(all_preds)    # (N,)
+    targets = np.concatenate(all_targets)  # (N,)
 
-    pred_dir = (preds.sum(axis=1) > 0).astype(int)
-    true_dir = (targets.sum(axis=1) > 0).astype(int)
-    dir_acc = (pred_dir == true_dir).mean()
+    dir_acc = float(((preds > 0) == (targets > 0)).mean())
+    mse     = float(np.mean((preds - targets) ** 2))
 
-    mse = float(np.mean((preds - targets) ** 2))
-
-    # Simple Sharpe: position = sign(predicted total return), realised = actual total return
-    positions = np.sign(preds.sum(axis=1))   # +1 or -1
-    realised = targets.sum(axis=1)
-    daily_pnl = positions * realised
-    sharpe = float(daily_pnl.mean() / (daily_pnl.std() + 1e-8) * np.sqrt(252))
+    # Windows have stride=3 and a 5-day forward period, so consecutive samples share 2
+    # days of returns. Subsample every ceil(5/3)=2 steps to get non-overlapping returns
+    # before computing Sharpe, avoiding inflated t-stats from correlated observations.
+    step = 2
+    positions  = np.sign(preds[::step])
+    daily_pnl  = positions * targets[::step]
+    sharpe     = float(daily_pnl.mean() / (daily_pnl.std() + 1e-8) * np.sqrt(252 / 5))
 
     return {
         "directional_accuracy": float(dir_acc),

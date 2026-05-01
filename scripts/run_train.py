@@ -65,8 +65,8 @@ def main():
     train_ds = DatasetCls(manifest, "train", pretrained=pretrained, normalize_stats=norm_stats)
     val_ds   = DatasetCls(manifest, "val",   pretrained=pretrained, normalize_stats=norm_stats)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,  num_workers=2, pin_memory=True)
-    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,  num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
 
     print(f"  train={len(train_ds):,}  val={len(val_ds):,}")
 

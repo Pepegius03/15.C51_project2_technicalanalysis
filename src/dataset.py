@@ -45,6 +45,14 @@ def compute_dataset_stats(manifest: pd.DataFrame, split: str = "train") -> tuple
     return mean, std
 
 
+def _preload(df: pd.DataFrame, mean: np.ndarray, std: np.ndarray) -> list[torch.Tensor]:
+    """Load all images into RAM once at dataset construction time."""
+    return [
+        _to_tensor(Image.open(p).convert("RGB"), mean, std)
+        for p in df["image_path"]
+    ]
+
+
 class ClassificationDataset(Dataset):
     """For candlestick and GAF images. Label = label_binary."""
 
@@ -62,20 +70,19 @@ class ClassificationDataset(Dataset):
         else:
             self.mean = _IMAGENET_MEAN
             self.std  = _IMAGENET_STD
+        self._cache = _preload(self.df, self.mean, self.std)
 
     def __len__(self) -> int:
         return len(self.df)
 
     def __getitem__(self, idx: int):
-        row = self.df.iloc[idx]
-        img = Image.open(row["image_path"]).convert("RGB")
-        x = _to_tensor(img, self.mean, self.std)
-        y = int(row["label_binary"])
+        x = self._cache[idx]
+        y = int(self.df.iloc[idx]["label_binary"])
         return x, y
 
 
 class RegressionDataset(Dataset):
-    """For line plot images. Target = log-returns tensor shape (5,)."""
+    """For line plot images. Target = 5-day cumulative return (scalar)."""
 
     def __init__(
         self,
@@ -85,20 +92,19 @@ class RegressionDataset(Dataset):
         normalize_stats: Optional[tuple[list, list]] = None,
     ):
         self.df = manifest[manifest["split"] == split].reset_index(drop=True)
-        self.return_cols = [f"r{i}" for i in range(1, 6)]
         if normalize_stats:
             self.mean = np.array(normalize_stats[0], dtype=np.float32)
             self.std  = np.array(normalize_stats[1], dtype=np.float32)
         else:
             self.mean = _IMAGENET_MEAN
             self.std  = _IMAGENET_STD
+        self._cache = _preload(self.df, self.mean, self.std)
+        rets = self.df[[f"r{i}" for i in range(1, 6)]].values.astype(np.float32)
+        # r_i are log-returns; sum then exp to compound into 5-day cumulative return
+        self._targets = torch.from_numpy(np.exp(rets.sum(axis=1)) - 1)
 
     def __len__(self) -> int:
         return len(self.df)
 
     def __getitem__(self, idx: int):
-        row = self.df.iloc[idx]
-        img = Image.open(row["image_path"]).convert("RGB")
-        x = _to_tensor(img, self.mean, self.std)
-        y = torch.tensor(row[self.return_cols].values.astype(np.float32))
-        return x, y
+        return self._cache[idx], self._targets[idx]
